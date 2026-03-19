@@ -12,16 +12,7 @@ import (
 	"nabr/request"
 )
 
-var (
-	cfgFile string
-	rawOutput bool
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "nabr",
-	Short: "A dynamic CLI tool driven by YAML config",
-	Long:  "nabr reads API command definitions from a YAML config file and registers each as a subcommand.",
-}
+var rootCmd *cobra.Command
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
@@ -31,36 +22,51 @@ func Execute() {
 
 func init() {
 	defaultConfig := filepath.Join(homeDir(), ".config", "nabr", "config.yaml")
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", defaultConfig, "config file path")
-	rootCmd.PersistentFlags().BoolVar(&rawOutput, "raw", false, "output raw response without pretty-printing")
+	rootCmd = newRootCmd(defaultConfig)
+}
+
+func newRootCmd(configPath string) *cobra.Command {
+	var cfgFile string
+	var rawOutput bool
+
+	root := &cobra.Command{
+		Use:   "nabr",
+		Short: "A dynamic CLI tool driven by YAML config",
+		Long:  "nabr reads API command definitions from a YAML config file and registers each as a subcommand.",
+	}
+
+	root.PersistentFlags().StringVar(&cfgFile, "config", configPath, "config file path")
+	root.PersistentFlags().BoolVar(&rawOutput, "raw", false, "output raw response without pretty-printing")
 
 	// Load config eagerly with default path so dynamic commands appear in --help.
 	// The --config flag override is handled via PersistentPreRunE.
-	loadAndRegisterCommands(defaultConfig)
+	loadAndRegisterCommandsTo(root, configPath, &rawOutput)
 
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		// If user provided a custom --config, reload commands
 		if cmd.Flags().Changed("config") {
 			// Remove previously registered commands and re-register
-			rootCmd.ResetCommands()
-			loadAndRegisterCommands(cfgFile)
+			root.ResetCommands()
+			loadAndRegisterCommandsTo(root, cfgFile, &rawOutput)
 		}
 		return nil
 	}
+
+	return root
 }
 
-func loadAndRegisterCommands(path string) {
+func loadAndRegisterCommandsTo(root *cobra.Command, path string, rawOutput *bool) {
 	cfg, err := config.Load(path)
 	if err != nil {
 		return
 	}
 
 	for _, c := range cfg.Commands {
-		registerCommand(c)
+		registerCommandTo(root, c, rawOutput)
 	}
 }
 
-func registerCommand(cfg config.Command) {
+func registerCommandTo(root *cobra.Command, cfg config.Command, rawOutput *bool) {
 	pathParams := request.ExtractPathParams(cfg.URL)
 
 	c := &cobra.Command{
@@ -111,7 +117,7 @@ func registerCommand(cfg config.Command) {
 			}
 
 			fmt.Printf("HTTP %d\n", resp.StatusCode)
-			fmt.Println(request.FormatJSON(resp.Body, rawOutput))
+			fmt.Println(request.FormatJSON(resp.Body, *rawOutput))
 			return nil
 		},
 	}
@@ -125,7 +131,7 @@ func registerCommand(cfg config.Command) {
 	c.Flags().StringSliceP("header", "H", nil, "Headers (key=value, repeatable)")
 	c.Flags().StringP("body", "b", "", "Request body")
 
-	rootCmd.AddCommand(c)
+	root.AddCommand(c)
 }
 
 func parseKeyValue(s string) (string, string, bool) {
