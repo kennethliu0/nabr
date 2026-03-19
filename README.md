@@ -76,6 +76,26 @@ commands:
     body: '{"title": "New Post", "draft": true}'
 ```
 
+### Environment Variables
+
+Use `${VAR_NAME}` syntax in any string value (url, headers, body, query_params) to substitute environment variables at load time. Unset variables are left as-is.
+
+```yaml
+commands:
+  - name: get-user
+    method: GET
+    url: ${API_HOST}/users/{id}
+    headers:
+      Authorization: Bearer ${API_TOKEN}
+```
+
+```bash
+export API_HOST=https://api.example.com
+export API_TOKEN=secret123
+nabr get-user --id 42
+# Authorization: Bearer secret123
+```
+
 ## Usage
 
 ### Path Parameters

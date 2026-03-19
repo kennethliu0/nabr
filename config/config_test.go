@@ -101,6 +101,85 @@ func TestLoadInvalidYAML(t *testing.T) {
 	}
 }
 
+func TestExpandEnvInURL(t *testing.T) {
+	t.Setenv("NABR_HOST", "https://api.example.com")
+	yaml := `
+commands:
+  - name: test
+    method: GET
+    url: ${NABR_HOST}/users
+`
+	cfg, err := Load(writeTempConfig(t, yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Commands[0].URL != "https://api.example.com/users" {
+		t.Errorf("url = %q", cfg.Commands[0].URL)
+	}
+}
+
+func TestExpandEnvInHeaders(t *testing.T) {
+	t.Setenv("NABR_TOKEN", "secret123")
+	yaml := `
+commands:
+  - name: test
+    method: GET
+    url: https://example.com
+    headers:
+      Authorization: Bearer ${NABR_TOKEN}
+`
+	cfg, err := Load(writeTempConfig(t, yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Commands[0].Headers["authorization"] != "Bearer secret123" {
+		t.Errorf("headers = %v", cfg.Commands[0].Headers)
+	}
+}
+
+func TestExpandEnvInBodyAndQueryParams(t *testing.T) {
+	t.Setenv("NABR_KEY", "mykey")
+	t.Setenv("NABR_SECRET", "mysecret")
+	yaml := `
+commands:
+  - name: test
+    method: POST
+    url: https://example.com
+    body: '{"api_key": "${NABR_KEY}"}'
+    query_params:
+      secret: ${NABR_SECRET}
+`
+	cfg, err := Load(writeTempConfig(t, yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := cfg.Commands[0]
+	if c.Body != `{"api_key": "mykey"}` {
+		t.Errorf("body = %q", c.Body)
+	}
+	if c.QueryParams["secret"] != "mysecret" {
+		t.Errorf("query_params = %v", c.QueryParams)
+	}
+}
+
+func TestExpandEnvUnsetVarLeftAsIs(t *testing.T) {
+	yaml := `
+commands:
+  - name: test
+    method: GET
+    url: https://example.com
+    headers:
+      X-Key: ${NABR_DEFINITELY_UNSET_VAR}
+`
+	cfg, err := Load(writeTempConfig(t, yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Commands[0].Headers["x-key"] != "${NABR_DEFINITELY_UNSET_VAR}" {
+		t.Errorf("expected unset var to be left as-is, got %q", cfg.Commands[0].Headers["x-key"])
+	}
+}
+
 func TestLoadEmptyFile(t *testing.T) {
 	path := writeTempConfig(t, "")
 	cfg, err := Load(path)

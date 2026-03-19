@@ -1,8 +1,13 @@
 package config
 
 import (
+	"os"
+	"regexp"
+
 	"github.com/spf13/viper"
 )
+
+var envRe = regexp.MustCompile(`\$\{(\w+)\}`)
 
 type Config struct {
 	Commands []Command `mapstructure:"commands"`
@@ -31,5 +36,32 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	cfg.expandEnv()
 	return &cfg, nil
+}
+
+func expandString(s string) string {
+	return envRe.ReplaceAllStringFunc(s, func(match string) string {
+		name := envRe.FindStringSubmatch(match)[1]
+		if val, ok := os.LookupEnv(name); ok {
+			return val
+		}
+		return match
+	})
+}
+
+func expandMap(m map[string]string) {
+	for k, v := range m {
+		m[k] = expandString(v)
+	}
+}
+
+func (cfg *Config) expandEnv() {
+	for i := range cfg.Commands {
+		c := &cfg.Commands[i]
+		c.URL = expandString(c.URL)
+		c.Body = expandString(c.Body)
+		expandMap(c.Headers)
+		expandMap(c.QueryParams)
+	}
 }
