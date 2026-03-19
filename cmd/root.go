@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -72,6 +73,38 @@ func registerCommand(cfg config.Command) {
 				params[p] = val
 			}
 
+			// Merge CLI query params into config
+			queryFlags, _ := cmd.Flags().GetStringSlice("query")
+			for _, qf := range queryFlags {
+				k, v, ok := parseKeyValue(qf)
+				if !ok {
+					return fmt.Errorf("invalid query param %q, expected key=value", qf)
+				}
+				if cfg.QueryParams == nil {
+					cfg.QueryParams = make(map[string]string)
+				}
+				cfg.QueryParams[k] = v
+			}
+
+			// Merge CLI headers into config
+			headerFlags, _ := cmd.Flags().GetStringSlice("header")
+			for _, hf := range headerFlags {
+				k, v, ok := parseKeyValue(hf)
+				if !ok {
+					return fmt.Errorf("invalid header %q, expected key=value", hf)
+				}
+				if cfg.Headers == nil {
+					cfg.Headers = make(map[string]string)
+				}
+				cfg.Headers[k] = v
+			}
+
+			// Override body if provided
+			if cmd.Flags().Changed("body") {
+				bodyFlag, _ := cmd.Flags().GetString("body")
+				cfg.Body = bodyFlag
+			}
+
 			resp, err := request.Execute(cfg, params)
 			if err != nil {
 				return err
@@ -88,7 +121,19 @@ func registerCommand(cfg config.Command) {
 		_ = c.MarkFlagRequired(p)
 	}
 
+	c.Flags().StringSliceP("query", "q", nil, "Query params (key=value, repeatable)")
+	c.Flags().StringSliceP("header", "H", nil, "Headers (key=value, repeatable)")
+	c.Flags().StringP("body", "b", "", "Request body")
+
 	rootCmd.AddCommand(c)
+}
+
+func parseKeyValue(s string) (string, string, bool) {
+	k, v, ok := strings.Cut(s, "=")
+	if !ok || k == "" {
+		return "", "", false
+	}
+	return k, v, true
 }
 
 func homeDir() string {

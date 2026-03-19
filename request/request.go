@@ -48,6 +48,12 @@ func Execute(cmd config.Command, params map[string]string) (*Response, error) {
 		req.Header.Set(k, v)
 	}
 
+	q := req.URL.Query()
+	for k, v := range cmd.QueryParams {
+		q.Set(k, v)
+	}
+	req.URL.RawQuery = q.Encode()
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
