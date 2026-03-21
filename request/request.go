@@ -28,7 +28,7 @@ func ExtractPathParams(url string) []string {
 	return params
 }
 
-func Execute(cmd config.Command, params map[string]string) (*Response, error) {
+func buildRequest(cmd config.Command, params map[string]string) (*http.Request, error) {
 	url := cmd.URL
 	for key, val := range params {
 		url = strings.ReplaceAll(url, "{"+key+"}", val)
@@ -54,6 +54,15 @@ func Execute(cmd config.Command, params map[string]string) (*Response, error) {
 	}
 	req.URL.RawQuery = q.Encode()
 
+	return req, nil
+}
+
+func Execute(cmd config.Command, params map[string]string) (*Response, error) {
+	req, err := buildRequest(cmd, params)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
@@ -66,6 +75,25 @@ func Execute(cmd config.Command, params map[string]string) (*Response, error) {
 	}
 
 	return &Response{StatusCode: resp.StatusCode, Body: body}, nil
+}
+
+type StreamResponse struct {
+	StatusCode int
+	Body       io.ReadCloser
+}
+
+func ExecuteStream(cmd config.Command, params map[string]string) (*StreamResponse, error) {
+	req, err := buildRequest(cmd, params)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+
+	return &StreamResponse{StatusCode: resp.StatusCode, Body: resp.Body}, nil
 }
 
 func FormatJSON(body []byte, raw bool) string {

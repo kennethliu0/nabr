@@ -225,3 +225,61 @@ func TestExecute(t *testing.T) {
 		}
 	})
 }
+
+func TestExecuteStream(t *testing.T) {
+	srv := httptest.NewServer(echoHandler())
+	defer srv.Close()
+
+	t.Run("returns readable body stream", func(t *testing.T) {
+		cmd := config.Command{Method: "GET", URL: srv.URL + "/ping"}
+		resp, err := ExecuteStream(cmd, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Errorf("status = %d, want 200", resp.StatusCode)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(body) == 0 {
+			t.Error("expected non-empty body")
+		}
+
+		var echo map[string]interface{}
+		if err := json.Unmarshal(body, &echo); err != nil {
+			t.Fatalf("body is not valid JSON: %s", string(body))
+		}
+		if echo["method"] != "GET" {
+			t.Errorf("method = %v, want GET", echo["method"])
+		}
+	})
+
+	t.Run("path params work in stream mode", func(t *testing.T) {
+		cmd := config.Command{Method: "GET", URL: srv.URL + "/users/{id}"}
+		resp, err := ExecuteStream(cmd, map[string]string{"id": "99"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		var echo map[string]interface{}
+		json.Unmarshal(body, &echo)
+		if echo["path"] != "/users/99" {
+			t.Errorf("path = %v, want /users/99", echo["path"])
+		}
+	})
+
+	t.Run("connection refused", func(t *testing.T) {
+		cmd := config.Command{Method: "GET", URL: "http://127.0.0.1:1/nope"}
+		_, err := ExecuteStream(cmd, nil)
+		if err == nil {
+			t.Fatal("expected error for connection refused")
+		}
+	})
+}

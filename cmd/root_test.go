@@ -150,6 +150,78 @@ commands:
 		}
 	})
 
+	t.Run("output to file from YAML config", func(t *testing.T) {
+		outFile := filepath.Join(t.TempDir(), "response.json")
+		yaml := `
+commands:
+  - name: download
+    method: GET
+    url: ` + srv.URL + `/data
+    output: ` + outFile + `
+`
+		root := newRootCmd(writeTestConfig(t, yaml))
+		root.SetArgs([]string{"download"})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+
+		data, err := os.ReadFile(outFile)
+		if err != nil {
+			t.Fatalf("expected output file to exist: %v", err)
+		}
+		if len(data) == 0 {
+			t.Error("expected non-empty output file")
+		}
+		// Verify it's valid JSON from the echo handler
+		var echo map[string]interface{}
+		if err := json.Unmarshal(data, &echo); err != nil {
+			t.Fatalf("output file is not valid JSON: %s", string(data))
+		}
+	})
+
+	t.Run("output flag overrides YAML config", func(t *testing.T) {
+		yamlOut := filepath.Join(t.TempDir(), "yaml-out.json")
+		flagOut := filepath.Join(t.TempDir(), "flag-out.json")
+		yaml := `
+commands:
+  - name: download
+    method: GET
+    url: ` + srv.URL + `/data
+    output: ` + yamlOut + `
+`
+		root := newRootCmd(writeTestConfig(t, yaml))
+		root.SetArgs([]string{"download", "-o", flagOut})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := os.Stat(yamlOut); !os.IsNotExist(err) {
+			t.Error("YAML output path should not have been written")
+		}
+		data, err := os.ReadFile(flagOut)
+		if err != nil {
+			t.Fatalf("expected flag output file to exist: %v", err)
+		}
+		if len(data) == 0 {
+			t.Error("expected non-empty output file")
+		}
+	})
+
+	t.Run("no output field prints to stdout", func(t *testing.T) {
+		yaml := `
+commands:
+  - name: ping
+    method: GET
+    url: ` + srv.URL + `/ping
+`
+		root := newRootCmd(writeTestConfig(t, yaml))
+		root.SetArgs([]string{"ping"})
+		// Just verify it doesn't error — stdout behavior is unchanged
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("invalid query param format", func(t *testing.T) {
 		yaml := `
 commands:

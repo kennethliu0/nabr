@@ -21,6 +21,7 @@ type Command struct {
 	Headers     map[string]string `mapstructure:"headers"`
 	Body        string            `mapstructure:"body"`
 	QueryParams map[string]string `mapstructure:"query_params"`
+	Output      string            `mapstructure:"output"`
 }
 
 func Load(path string) (*Config, error) {
@@ -61,6 +62,7 @@ func (cfg *Config) expandEnv() {
 		c := &cfg.Commands[i]
 		c.URL = expandString(c.URL)
 		c.Body = expandString(c.Body)
+		c.Output = expandString(c.Output)
 		expandMap(c.Headers)
 		expandMap(c.QueryParams)
 	}

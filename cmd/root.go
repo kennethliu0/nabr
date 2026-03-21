@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,6 +112,36 @@ func registerCommandTo(root *cobra.Command, cfg config.Command, rawOutput *bool)
 				cfg.Body = bodyFlag
 			}
 
+			// Resolve output path: CLI flag takes precedence over YAML config
+			outputPath := cfg.Output
+			if cmd.Flags().Changed("output") {
+				outputPath, _ = cmd.Flags().GetString("output")
+			}
+
+			if outputPath != "" {
+				streamResp, err := request.ExecuteStream(cfg, params)
+				if err != nil {
+					return err
+				}
+				defer streamResp.Body.Close()
+
+				fmt.Printf("HTTP %d\n", streamResp.StatusCode)
+
+				f, err := os.Create(outputPath)
+				if err != nil {
+					return fmt.Errorf("creating output file: %w", err)
+				}
+				defer f.Close()
+
+				n, err := io.Copy(f, streamResp.Body)
+				if err != nil {
+					return fmt.Errorf("writing response to file: %w", err)
+				}
+
+				fmt.Fprintf(os.Stderr, "Saved to %s (%d bytes)\n", outputPath, n)
+				return nil
+			}
+
 			resp, err := request.Execute(cfg, params)
 			if err != nil {
 				return err
@@ -130,6 +161,7 @@ func registerCommandTo(root *cobra.Command, cfg config.Command, rawOutput *bool)
 	c.Flags().StringSliceP("query", "q", nil, "Query params (key=value, repeatable)")
 	c.Flags().StringSliceP("header", "H", nil, "Headers (key=value, repeatable)")
 	c.Flags().StringP("body", "b", "", "Request body")
+	c.Flags().StringP("output", "o", "", "Write response body to file")
 
 	root.AddCommand(c)
 }

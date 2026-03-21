@@ -180,6 +180,41 @@ commands:
 	}
 }
 
+func TestLoadConfigWithOutput(t *testing.T) {
+	yaml := `
+commands:
+  - name: download
+    method: GET
+    url: https://example.com/file
+    output: /tmp/file.bin
+`
+	cfg, err := Load(writeTempConfig(t, yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Commands[0].Output != "/tmp/file.bin" {
+		t.Errorf("output = %q, want /tmp/file.bin", cfg.Commands[0].Output)
+	}
+}
+
+func TestExpandEnvInOutput(t *testing.T) {
+	t.Setenv("NABR_DIR", "/home/user/downloads")
+	yaml := `
+commands:
+  - name: download
+    method: GET
+    url: https://example.com/file
+    output: ${NABR_DIR}/file.txt
+`
+	cfg, err := Load(writeTempConfig(t, yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Commands[0].Output != "/home/user/downloads/file.txt" {
+		t.Errorf("output = %q, want /home/user/downloads/file.txt", cfg.Commands[0].Output)
+	}
+}
+
 func TestLoadEmptyFile(t *testing.T) {
 	path := writeTempConfig(t, "")
 	cfg, err := Load(path)
